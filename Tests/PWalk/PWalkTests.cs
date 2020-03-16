@@ -130,6 +130,11 @@ namespace Echo.PWalkService.Tests
 				this.text = mark.Text;
 			}
 
+			public void RaiseVisited(string text)
+			{
+				Visited?.Invoke(this, new ItemEventArgs<string>(text));
+			}
+
 			#region private members
 			private string text;
 			#endregion // private members

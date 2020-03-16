@@ -1174,7 +1174,6 @@ namespace Echo.Data
 			#endregion  // IDisposable interface support
 
 			#region private members
-			private static readonly DictionaryEntry EmptyDictionaryEntry = new DictionaryEntry();
 			private volatile IEnumerator<DataPropertyShell<TKey, TValue>> core;
 			private DictionaryEntry entry;
 			private bool needsToCreate;
