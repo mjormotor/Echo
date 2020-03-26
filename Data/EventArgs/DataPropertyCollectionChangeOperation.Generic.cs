@@ -23,16 +23,16 @@
 		/// <summary>
 		/// 設定値
 		/// </summary>
-		public DataPropertyValueContext<T> SettingValue { get; }
+		public DataPropertyCollectionValueContext<T> SettingValue { get; }
 
 		#region IReadOnlyDataPropertyCollectionChangeOperation<T> interface support
-		IReadOnlyDataPropertyValueContext<T> IReadOnlyDataPropertyCollectionChangeOperation<T>.SettingValue => SettingValue;
+		IReadOnlyDataPropertyCollectionValueContext<T> IReadOnlyDataPropertyCollectionChangeOperation<T>.SettingValue => SettingValue;
 		#endregion  // IReadOnlyDataPropertyCollectionChangeOperation<T> interface support
 
 		#region internal members
 		internal static DataPropertyCollectionChangeOperation<T> Insert(int index, DataProperty<T> property)
 		{
-			var settingValue = new DataPropertyValueContext<T>(property);
+			var settingValue = new DataPropertyCollectionValueContext<T>(property);
 			return new DataPropertyCollectionChangeOperation<T>(DataPropertyCollectionChangeAction.Insert, index, settingValue);
 		}
 
@@ -46,6 +46,12 @@
 			return new DataPropertyCollectionChangeOperation<T>(DataPropertyCollectionChangeAction.Move, index, movingIndex);
 		}
 
+		internal static DataPropertyCollectionChangeOperation<T> Set(int index, T oldValue, T inputValue, DataProperty<T> property)
+		{
+			var settingValue = new DataPropertyCollectionValueContext<T>(oldValue, inputValue, property);
+			return new DataPropertyCollectionChangeOperation<T>(DataPropertyCollectionChangeAction.Set, index, settingValue);
+		}
+
 		internal static DataPropertyCollectionChangeOperation<T> Swap(int index, int movingIndex)
 		{
 			return new DataPropertyCollectionChangeOperation<T>(DataPropertyCollectionChangeAction.Swap, index, movingIndex);
@@ -53,13 +59,13 @@
 		#endregion // internal members
 
 		#region private members
-		private DataPropertyCollectionChangeOperation(DataPropertyCollectionChangeAction action, int index, DataPropertyValueContext<T> settingValue = null)
+		private DataPropertyCollectionChangeOperation(DataPropertyCollectionChangeAction action, int index, DataPropertyCollectionValueContext<T> settingValue = null)
 			: this(action, index, -1, settingValue)
 		{
 			SettingValue = settingValue;
 		}
 
-		private DataPropertyCollectionChangeOperation(DataPropertyCollectionChangeAction action, int index, int movingIndex, DataPropertyValueContext<T> settingValue = null)
+		private DataPropertyCollectionChangeOperation(DataPropertyCollectionChangeAction action, int index, int movingIndex, DataPropertyCollectionValueContext<T> settingValue = null)
 		{
 			Action = action;
 			Index = index;

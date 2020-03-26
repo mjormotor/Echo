@@ -552,6 +552,29 @@ namespace Echo.Data.Tests
 		}
 
 		[TestMethod]
+		public void DataPropertyCollectionOperatorTest()
+		{
+			var data = new DataCollector();
+
+			using (var collectionOperator = data.PropertyIntCollection.GetCollectionOperator())
+			{
+				collectionOperator.Add(4);
+				collectionOperator.Add(2);
+				collectionOperator.Add(1);
+				Assert.IsTrue(collectionOperator.Count == 3);
+				Assert.IsTrue(collectionOperator[0] == 4);
+				Assert.IsTrue(collectionOperator[1] == 2);
+				Assert.IsTrue(collectionOperator[2] == 1);
+				Assert.IsTrue(data.PropertyIntCollection.Count == 0);
+			}
+
+			Assert.IsTrue(data.PropertyIntCollection.Count == 3);
+			Assert.IsTrue(data.PropertyIntCollection[0].Value == 4);
+			Assert.IsTrue(data.PropertyIntCollection[1].Value == 2);
+			Assert.IsTrue(data.PropertyIntCollection[2].Value == 1);
+		}
+
+		[TestMethod]
 		public void DataPropertyDictionarySerializeTest()
 		{
 			var data = new DataMapper();
@@ -599,7 +622,209 @@ namespace Echo.Data.Tests
 			Assert.IsTrue(data.PropertyPedigree[armr].Value == body);
 		}
 
+		[TestMethod]
+		public void DataPropertyPedigreeTest()
+		{
+			var data = new DataPedigree();
+			var root = new SimpleData();
+			root.PropertyString.Value = "root";
+			var body = new SimpleData();
+			body.PropertyString.Value = "body";
+			var arml = new SimpleData();
+			arml.PropertyString.Value = "arml";
+			var armr = new SimpleData();
+			armr.PropertyString.Value = "armr";
+			data.PropertyPedigree.Add(arml);
+			data.PropertyPedigree.Add(armr);
+			data.PropertyPedigree.Add(body);
+			data.PropertyPedigree.Add(root);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[1].Core.PropertyString.Value == "armr");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[2].Core.PropertyString.Value == "body");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[3].Core.PropertyString.Value == "root");
+
+			data.PropertyPedigree.Parent(arml, body);
+			data.PropertyPedigree.Parent(armr, body);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 2);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "body");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[1].Core.PropertyString.Value == "root");
+			var bodyNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(bodyNode.Children.Count == 2);
+			Assert.IsTrue(bodyNode.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(bodyNode.Children[1].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Parent(body, root);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			var rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 1);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "body");
+			bodyNode = rootNode.Children[0];
+			Assert.IsTrue(bodyNode.Children.Count == 2);
+			Assert.IsTrue(bodyNode.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(bodyNode.Children[1].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Unparent(arml);
+			data.PropertyPedigree.Unparent(armr);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 3);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "body");
+			Assert.IsTrue(rootNode.Children[1].Core.PropertyString.Value == "armr");
+			Assert.IsTrue(rootNode.Children[2].Core.PropertyString.Value == "arml");
+
+			data.PropertyPedigree.Unparent(body);
+			data.PropertyPedigree.Unparent(arml);
+			data.PropertyPedigree.Unparent(armr);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[1].Core.PropertyString.Value == "armr");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[2].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[3].Core.PropertyString.Value == "body");
+
+			data.PropertyPedigree.Parent(body, root);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 3);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[1].Core.PropertyString.Value == "armr");
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[2].Core.PropertyString.Value == "arml");
+			rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 1);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "body");
+
+			data.PropertyPedigree.Parent(arml, body);
+			data.PropertyPedigree.Parent(armr, body);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 1);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "body");
+			bodyNode = rootNode.Children[0];
+			Assert.IsTrue(bodyNode.Children.Count == 2);
+			Assert.IsTrue(bodyNode.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(bodyNode.Children[1].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Remove(body);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 3);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 2);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(rootNode.Children[1].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Remove(arml);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 2);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 1);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Remove(root);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Add(root);
+			data.PropertyPedigree.Add(body, root);
+			data.PropertyPedigree.Add(arml, body);
+			data.PropertyPedigree.Parent(armr, body);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "root");
+			rootNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(rootNode.Children.Count == 1);
+			Assert.IsTrue(rootNode.Children[0].Core.PropertyString.Value == "body");
+			bodyNode = rootNode.Children[0];
+			Assert.IsTrue(bodyNode.Children.Count == 2);
+			Assert.IsTrue(bodyNode.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(bodyNode.Children[1].Core.PropertyString.Value == "armr");
+
+			data.PropertyPedigree.Remove(root);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 3);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children[0].Core.PropertyString.Value == "body");
+			bodyNode = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(bodyNode.Children.Count == 2);
+			Assert.IsTrue(bodyNode.Children[0].Core.PropertyString.Value == "arml");
+			Assert.IsTrue(bodyNode.Children[1].Core.PropertyString.Value == "armr");
+		}
+
+		[TestMethod]
+		public void DataPropertyPedigreeSerializeTest()
+		{
+			var data = new DataPedigree();
+			var rootOriginal = new SimpleData();
+			rootOriginal.PropertyString.Value = "root";
+			var bodyOriginal = new SimpleData();
+			bodyOriginal.PropertyString.Value = "body";
+			var armlOriginal = new SimpleData();
+			armlOriginal.PropertyString.Value = "arml";
+			var armrOriginal = new SimpleData();
+			armrOriginal.PropertyString.Value = "armr";
+			data.PropertyPedigree.Add(rootOriginal, null);
+			data.PropertyPedigree.Add(bodyOriginal, rootOriginal);
+			data.PropertyPedigree.Add(armlOriginal, bodyOriginal);
+			data.PropertyPedigree.Add(armrOriginal, bodyOriginal);
+
+			var serializer = new DataPropertySerializer();
+			using var stream = new MemoryStream();
+
+			serializer.Serialize(stream, data);
+			var xml = Encoding.UTF8.GetString(stream.GetBuffer());
+			stream.Position = 0;
+
+			var original = data;
+			data = new DataPedigree();
+			serializer.Deserialize(stream, data);
+
+			Assert.IsTrue(data.PropertyPedigree.Count == 4);
+
+			Assert.IsTrue(data.PropertyPedigree.Tree.Root.Children.Count == 1);
+			var root = data.PropertyPedigree.Tree.Root.Children[0];
+			Assert.IsTrue(root.Core.PropertyString.Value == "root");
+
+			Assert.IsTrue(root.Children.Count == 1);
+			var body = root.Children[0];
+			Assert.IsTrue(body.Core.PropertyString.Value == "body");
+
+			Assert.IsTrue(body.Children.Count == 2);
+			var arml = body.Children[0];
+			var armr = body.Children[1];
+			Assert.IsTrue(arml.Core.PropertyString.Value == "arml");
+			Assert.IsTrue(armr.Core.PropertyString.Value == "armr");
+		}
+
 		#region private members
+		#region class SimpleData
+		[System.Diagnostics.DebuggerDisplay("{PropertyString.Value,nq}")]
+		public class SimpleData
+		{
+			public DataProperty<string> PropertyString { get; } = new DataProperty<string>();
+		}
+		#endregion // class SimpleData
+
 		#region class Data
 		public class Data
 		{
@@ -762,6 +987,13 @@ namespace Echo.Data.Tests
 			public DataPropertyDictionary<Data, Data> PropertyPedigree { get; } = new DataPropertyDictionary<Data, Data>();
 		}
 		#endregion // class DataMapper
+
+		#region class DataPedigree
+		public class DataPedigree
+		{
+			public DataPropertyPedigree<SimpleData> PropertyPedigree { get; } = new DataPropertyPedigree<SimpleData>();
+		}
+		#endregion // class DataPedigree
 
 		#region class Graph
 		public class Graph

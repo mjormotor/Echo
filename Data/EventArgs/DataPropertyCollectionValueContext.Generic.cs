@@ -1,9 +1,9 @@
 ﻿namespace Echo.Data
 {
 	/// <summary>
-	/// データプロパティ値コンテキスト
+	/// データプロパティ配列値コンテキスト
 	/// </summary>
-	public class DataPropertyValueContext<T> : IReadOnlyDataPropertyValueContext<T>
+	public class DataPropertyCollectionValueContext<T> : IReadOnlyDataPropertyCollectionValueContext<T>
 	{
 		/// <summary>
 		/// 変更後の値
@@ -21,19 +21,19 @@
 		public T OldValue { get; }
 
 		#region internal members
-		internal DataPropertyValueContext(DataProperty<T> property)
+		internal DataPropertyCollectionValueContext(DataProperty<T> property)
 		{
 			NewValue = property.Value;
 			InputValue = property.Value;
-			OldValue = default(T);
+			OldValue = default;
 			Property = property;
 		}
 
-		internal DataPropertyValueContext(T value, DataProperty<T> property)
+		internal DataPropertyCollectionValueContext(T oldValue, T inputValue, DataProperty<T> property)
 		{
-			NewValue = value;
-			InputValue = value;
-			OldValue = property.Value;
+			NewValue = inputValue;
+			InputValue = inputValue;
+			OldValue = oldValue;
 			Property = property;
 		}
 

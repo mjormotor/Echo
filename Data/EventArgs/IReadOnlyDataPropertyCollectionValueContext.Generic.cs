@@ -1,9 +1,9 @@
 ﻿namespace Echo.Data
 {
 	/// <summary>
-	/// データプロパティ値コンテキスト
+	/// データプロパティ配列値コンテキスト
 	/// </summary>
-	public interface IReadOnlyDataPropertyValueContext<out T>
+	public interface IReadOnlyDataPropertyCollectionValueContext<out T>
 	{
 		/// <summary>
 		/// 変更後の値

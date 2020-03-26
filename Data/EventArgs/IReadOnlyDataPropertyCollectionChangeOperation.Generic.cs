@@ -8,6 +8,6 @@
 		/// <summary>
 		/// 設定値
 		/// </summary>
-		IReadOnlyDataPropertyValueContext<T> SettingValue { get; }
+		IReadOnlyDataPropertyCollectionValueContext<T> SettingValue { get; }
 	}
 }

@@ -13,11 +13,15 @@ namespace Echo.Data
 	[System.Diagnostics.DebuggerTypeProxy(typeof(DataPropertyCollection<>.DebugView))]
 	public class DataPropertyCollection<T> : IReadOnlyList<DataProperty<T>>, IReadOnlyIndexer<int, DataProperty<T>>, IDataPropertyCollection
 	{
-		#region class Operator
+		#region class CollectionOperator
+		/// <summary>
+		/// 配列操作
+		/// </summary>
 		[System.Diagnostics.DebuggerDisplay("Count = {Count}")]
-		public class Operator : IReadOnlyList<T>, IDisposable
+		[System.Diagnostics.DebuggerTypeProxy(typeof(DataPropertyCollection<>.CollectionOperator.DebugView))]
+		public class CollectionOperator : IReadOnlyList<T>, IDisposable
 		{
-			public Operator(DataPropertyCollection<T> owner)
+			public CollectionOperator(DataPropertyCollection<T> owner)
 			{
 				if (owner == null)
 				{
@@ -25,8 +29,9 @@ namespace Echo.Data
 				}
 
 				this.owner = owner;
-				this.items.AddRange(owner.Items.Select(_ => _.Value));
 				this.block = this.owner.BlockReentrancy();
+
+				Shells = new List<Shell>(owner.Items.Select(_ => new Shell(_)));
 			}
 
 			public void Add(T value) => InsertItem(Count, value);
@@ -35,11 +40,44 @@ namespace Echo.Data
 
 			public void Clear() => ClearItems();
 
-			public void Contains(T value) => Items.Contains(value);
+			public void Contains(T value) => Shells.Any(_ => Equals(_.Value, value));
 
-			public void CopyTo(T[] array, int arrayIndex) => Items.CopyTo(array, arrayIndex);
+			public void CopyTo(T[] array, int arrayIndex)
+			{
+				if (array == null)
+				{
+					throw new ArgumentNullException(nameof(array));
+				}
 
-			public int IndexOf(T value) => Items.IndexOf(value);
+				if (arrayIndex < 0 || arrayIndex > array.Length)
+				{
+					throw new ArgumentOutOfRangeException(nameof(arrayIndex), Echo.Properties.Resources.MESSAGE_EXCEPTION_ARGUMENT_OUT_OF_RANGE_NEGATIVE_NUMBER);
+				}
+
+				if (array.Length - arrayIndex < this.owner.Count)
+				{
+					throw new ArgumentException(Echo.Properties.Resources.MESSAGE_EXCEPTION_ARGUMENT_SHORT_LENGTH_ARRAY);
+				}
+
+				foreach (var value in this)
+				{
+					array[arrayIndex++] = value;
+				}
+			}
+
+			public int IndexOf(T value)
+			{
+				for (var index = 0; index < Count; ++index)
+				{
+					var sample = this[index];
+					if (Equals(sample, value))
+					{
+						return index;
+					}
+				}
+
+				return -1;
+			}
 
 			public void Insert(int index, T value) => InsertItem(index, value);
 
@@ -63,7 +101,15 @@ namespace Echo.Data
 
 			public void RemoveRange(int index, int count) => RemoveItems(index, count);
 
-			public void ResetRange(IEnumerable<T> values) => ResetItems(values);
+			public void Reset(IEnumerable<T> values)
+			{
+				ClearItems();
+				InsertItems(0, values);
+			}
+
+			public void Set(int index, T value) => SetItem(index, value);
+
+			public void SetRange(int index, IEnumerable<T> values) => SetItems(index, values);
 
 			public void Swap(int index0, int index1) => SwapItem(index0, index1);
 
@@ -74,13 +120,19 @@ namespace Echo.Data
 			IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 			#endregion  // IEnumerable interface support
 
-			public IEnumerator<T> GetEnumerator() => Items.GetEnumerator();
+			public IEnumerator<T> GetEnumerator()
+			{
+				foreach (var shell in Shells)
+				{
+					yield return shell.Value;
+				}
+			}
 			#endregion  // IEnumerable<T> interface support
 
-			public int Count => Items.Count;
+			public int Count => Shells.Count;
 			#endregion  // IReadOnlyCollection<T> interface support
 
-			public T this[int index] => Items[index];
+			public T this[int index] => Shells[index].Value;
 			#endregion  // IReadOnlyList<T> interface support
 
 			#region IDisposable interface support
@@ -105,30 +157,47 @@ namespace Echo.Data
 			#endregion  // IDisposable interface support
 
 			#region protected members
+			#region class Shell
+			protected class Shell
+			{
+				public Shell(DataProperty<T> property)
+				{
+					Property = property;
+					Value = Property.Value;
+				}
+
+				public DataProperty<T> Property { get; }
+
+				public T Value { get; set; }
+			}
+			#endregion // class Shell
+
 			#region protected virtual members
 			protected virtual void ClearItems()
 			{
 				if (Count > 0)
 				{
-					Items.Clear();
+					Shells.Clear();
 					this.operations.AddRange(Enumerable.Range(0, Count).Reverse().Select(_ => DataPropertyCollectionChangeOperation<T>.Remove(_)));
 				}
 			}
 
 			protected virtual void InsertItem(int index, T value)
 			{
-				Items.Insert(index, value);
-				this.operations.Add(DataPropertyCollectionChangeOperation<T>.Insert(index, new DataProperty<T>(ItemPropertyName) { Value = value, }));
+				var item = new DataProperty<T>(ItemPropertyName) { Value = value, };
+				Shells.Insert(index, new Shell(item));
+				this.operations.Add(DataPropertyCollectionChangeOperation<T>.Insert(index, item));
 			}
 
 			protected virtual void InsertItems(int index, IEnumerable<T> values)
 			{
-				if (items.Any())
+				if (values.Any())
 				{
 					foreach (var value in values)
 					{
-						Items.Insert(index, value);
-						this.operations.Add(DataPropertyCollectionChangeOperation<T>.Insert(index, new DataProperty<T>(ItemPropertyName) { Value = value, }));
+						var item = new DataProperty<T>(ItemPropertyName) { Value = value, };
+						Shells.Insert(index, new Shell(item));
+						this.operations.Add(DataPropertyCollectionChangeOperation<T>.Insert(index, item));
 						++index;
 					}
 				}
@@ -136,27 +205,24 @@ namespace Echo.Data
 
 			protected virtual void MoveItem(int oldIndex, int newIndex)
 			{
-				var item = Items[oldIndex];
-				Items.RemoveAt(oldIndex);
-				Items.Insert(newIndex, item);
+				var shell = Shells[oldIndex];
+				Shells.RemoveAt(oldIndex);
+				Shells.Insert(newIndex, shell);
 				this.operations.Add(DataPropertyCollectionChangeOperation<T>.Move(oldIndex, newIndex));
 			}
 
 			protected virtual void RemoveItem(int index)
 			{
-				Items.RemoveAt(index);
+				Shells.RemoveAt(index);
 				this.operations.Add(DataPropertyCollectionChangeOperation<T>.Remove(index));
 			}
 
 			protected virtual void RemoveItems(int index, int count)
 			{
-				if (items.Any())
+				foreach (var value in Enumerable.Range(index, count).Reverse())
 				{
-					foreach (var value in Enumerable.Range(index, count).Reverse())
-					{
-						Items.RemoveAt(value);
-						this.operations.Add(DataPropertyCollectionChangeOperation<T>.Remove(value));
-					}
+					Shells.RemoveAt(value);
+					this.operations.Add(DataPropertyCollectionChangeOperation<T>.Remove(value));
 				}
 			}
 
@@ -166,29 +232,76 @@ namespace Echo.Data
 				InsertItems(0, items);
 			}
 
+			protected virtual void SetItem(int index, T value)
+			{
+				var shell = Shells[index];
+				var oldValue = shell.Value;
+				shell.Value = value;
+				this.operations.Add(DataPropertyCollectionChangeOperation<T>.Set(index, oldValue, value, shell.Property));
+			}
+
+			protected virtual void SetItems(int index, IEnumerable<T> values)
+			{
+				if (values.Any())
+				{
+					foreach (var value in values)
+					{
+						var shell = Shells[index];
+						var oldValue = shell.Value;
+						shell.Value = value;
+						this.operations.Add(DataPropertyCollectionChangeOperation<T>.Set(index, oldValue, value, shell.Property));
+						++index;
+					}
+				}
+			}
+
 			protected virtual void SwapItem(int index0, int index1)
 			{
-				var item0 = Items[index0];
-				var item1 = Items[index1];
-				Items.RemoveAt(index0);
-				Items.Insert(index1, item0);
-				Items.Remove(item1);
-				Items.Insert(index0, item1);
+				var shell0 = Shells[index0];
+				var shell1 = Shells[index1];
+				Shells.RemoveAt(index0);
+				Shells.Insert(index1, shell0);
+				Shells.Remove(shell1);
+				Shells.Insert(index0, shell1);
 				this.operations.Add(DataPropertyCollectionChangeOperation<T>.Swap(index0, index1));
 			}
 			#endregion // protected virtual members
 
-			protected IList<T> Items => this.items;
+			protected IList<Shell> Shells { get; }
 			#endregion // protected members
 
 			#region private members
+			#region class DebugView
+			private class DebugView
+			{
+				public DebugView(CollectionOperator target)
+				{
+					this.target = target;
+				}
+
+				[System.Diagnostics.DebuggerBrowsable(System.Diagnostics.DebuggerBrowsableState.RootHidden)]
+				public T[] Items
+				{
+					get
+					{
+						var ret = new T[this.target.Count];
+						this.target.CopyTo(ret, 0);
+						return ret;
+					}
+				}
+
+				#region private members
+				private CollectionOperator target;
+				#endregion // private members
+			}
+			#endregion // class DebugView
+
 			private DataPropertyCollection<T> owner;
-			private List<T> items = new List<T>();
 			private List<DataPropertyCollectionChangeOperation<T>> operations = new List<DataPropertyCollectionChangeOperation<T>>();
 			private volatile IDisposable block;
 			#endregion // private members
 		}
-		#endregion // class Operator
+		#endregion // class CollectionOperator
 
 		public DataPropertyCollection([CallerMemberName] string name = null)
 		{
@@ -295,12 +408,25 @@ namespace Echo.Data
 		}
 
 		/// <summary>
+		/// 設定操作の作成
+		/// </summary>
+		public DataPropertyCollectionChangeOperation<T> GenerateSetOperation(int index, T value)
+		{
+			return DataPropertyCollectionChangeOperation<T>.Set(index, Items[index].Value, value, Items[index]);
+		}
+
+		/// <summary>
 		/// 交換操作の作成
 		/// </summary>
 		public DataPropertyCollectionChangeOperation<T> GenerateSwapOperation(int index0, int index1)
 		{
 			return DataPropertyCollectionChangeOperation<T>.Swap(index0, index1);
 		}
+
+		/// <summary>
+		/// 配列操作
+		/// </summary>
+		public CollectionOperator GetCollectionOperator() => new CollectionOperator(this);
 
 		/// <summary>
 		/// 値の番号の検索
@@ -362,7 +488,11 @@ namespace Echo.Data
 		/// <summary>
 		/// 値の再設定
 		/// </summary>
-		public void ResetRange(IEnumerable<T> values) => ResetItems(values);
+		public void Reset(IEnumerable<T> values)
+		{
+			ClearItems();
+			InsertItems(0, values);
+		}
 
 		/// <summary>
 		/// 値の交換
@@ -506,6 +636,10 @@ namespace Echo.Data
 			{
 				switch (operation.Action)
 				{
+					case DataPropertyCollectionChangeAction.Set:
+						operation.SettingValue.Property.Value = operation.SettingValue.NewValue;
+						break;
+
 					case DataPropertyCollectionChangeAction.Insert:
 						var property = operation.SettingValue.Property;
 						property.Value = operation.SettingValue.NewValue;
@@ -667,12 +801,49 @@ namespace Echo.Data
 		}
 
 		/// <summary>
-		/// 再設定の操作
+		/// 設定の操作
 		/// </summary>
-		protected virtual void ResetItems(IEnumerable<T> items)
+		protected virtual void SetItem(int index, T value)
 		{
-			ClearItems();
-			InsertItems(0, items);
+			CheckReentrancy();
+			var operation = GenerateSetOperation(index, value);
+
+			var e = new DataPropertyCollectionChangingEventArgs<T>(this, operation);
+			OnDataPropertyCollectionChanging(e);
+			if (!e.Cancel)
+			{
+				if (Execute(e.Operations))
+				{
+					OnDataPropertyCollectionChanged(new DataPropertyCollectionChangedEventArgs<T>(this, e.Operations, e.InputOperations));
+				}
+			}
+		}
+
+		/// <summary>
+		/// 連続設定の操作
+		/// </summary>
+		protected virtual void SetItems(int index, IEnumerable<T> values)
+		{
+			if (items.Any())
+			{
+				CheckReentrancy();
+
+				var operations = new List<DataPropertyCollectionChangeOperation<T>>();
+				foreach (var value in values)
+				{
+					operations.Add(GenerateSetOperation(index++, value));
+				}
+
+				var e = new DataPropertyCollectionChangingEventArgs<T>(this, operations);
+				OnDataPropertyCollectionChanging(e);
+				if (!e.Cancel)
+				{
+					if (Execute(e.Operations))
+					{
+						OnDataPropertyCollectionChanged(new DataPropertyCollectionChangedEventArgs<T>(this, e.Operations, e.InputOperations));
+					}
+				}
+			}
 		}
 
 		/// <summary>

@@ -3,10 +3,10 @@
 namespace Echo.Data
 {
 	/// <summary>
-	/// キー付きデータプロパティ
+	/// キー付きデータプロパティ格納
 	/// </summary>
 	[System.Diagnostics.DebuggerTypeProxy(typeof(DataPropertyShell<,>.DebugView))]
-	public class DataPropertyShell<TKey, TValue> : KeyedValueShell<TKey, DataProperty<TValue>>, IDataPropertyShell
+	public class DataPropertyShell<TKey, TValue> : KeyedValueShell<TKey, DataProperty<TValue>>, IReadOnlyShell<IDataProperty>
 	{
 		public DataPropertyShell(TKey key, DataProperty<TValue> value)
 			: base(key, value)
@@ -23,9 +23,9 @@ namespace Echo.Data
 		{
 		}
 
-		#region IDataPropertyShell interface support
-		IDataProperty IDataPropertyShell.Core => Core;
-		#endregion  // IDataPropertyShell interface 
+		#region IReadOnlyShell<IDataProperty> interface support
+		IDataProperty IReadOnlyShell<IDataProperty>.Core => Core;
+		#endregion  // IReadOnlyShell<IDataProperty> interface 
 
 
 		#region private members

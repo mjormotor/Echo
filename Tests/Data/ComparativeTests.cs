@@ -13,6 +13,7 @@ namespace Echo.Data.Tests
 {
 	using Dictionary = Dictionary<object, object>;
 	using DataPropertyDictionary = DataPropertyDictionary<object, object>;
+	using DataPropertyPedigree = DataPropertyPedigree<object>;
 
 	[TestClass]
 	public class ComparativeTests
@@ -348,6 +349,39 @@ namespace Echo.Data.Tests
 				((ICollection<DataProperty<object>>)dictionary.Items).Add(null);
 			}
 			catch (NotSupportedException ex)
+			{
+				System.Diagnostics.Debug.WriteLine(ex.Message);
+			}
+			System.Diagnostics.Debug.WriteLine(string.Empty);
+			System.Diagnostics.Debug.WriteLine(string.Empty);
+
+			System.Diagnostics.Debug.WriteLine($"> {nameof(Dictionary)}.{nameof(Dictionary.Add)}(object, object) on iteration");
+			try
+			{
+				var dictionary = new DataPropertyDictionary();
+				dictionary.Add(new object(), new object());
+				foreach (var item in dictionary)
+				{
+					dictionary.Add(new object(), new object());
+				}
+			}
+			catch (InvalidOperationException ex)
+			{
+				System.Diagnostics.Debug.WriteLine(ex.Message);
+			}
+			System.Diagnostics.Debug.WriteLine(string.Empty);
+
+			System.Diagnostics.Debug.WriteLine($"> {nameof(DataPropertyPedigree)}.{nameof(DataPropertyPedigree.Add)}(object) on iteration");
+			try
+			{
+				var pedigree = new DataPropertyPedigree();
+				pedigree.Add(new object());
+				foreach (var item in pedigree.Tree.Root.Children)
+				{
+					pedigree.Add(new object());
+				}
+			}
+			catch (InvalidOperationException ex)
 			{
 				System.Diagnostics.Debug.WriteLine(ex.Message);
 			}

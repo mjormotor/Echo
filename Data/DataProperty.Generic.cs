@@ -8,7 +8,7 @@ namespace Echo.Data
 	/// </summary>
 	[System.Diagnostics.DebuggerDisplay("{Value}")]
 	[System.Diagnostics.DebuggerTypeProxy(typeof(DataProperty<>.DebugView))]
-	public class DataProperty<T> : IDataProperty, IDataPropertyShell
+	public class DataProperty<T> : IDataProperty, IReadOnlyShell<IDataProperty>
 	{
 		public DataProperty([CallerMemberName] string name = null)
 		{
@@ -86,9 +86,9 @@ namespace Echo.Data
 		}
 		#endregion  // IDataProperty interface support
 
-		#region IDataPropertyShell interface support
-		IDataProperty IDataPropertyShell.Core => this;
-		#endregion  // IDataPropertyShell interface support
+		#region IReadOnlyShell<IDataProperty> interface support
+		IDataProperty IReadOnlyShell<IDataProperty>.Core => this;
+		#endregion  // IReadOnlyShell<IDataProperty> interface support
 
 		#region protected members
 		#region protected virtual members

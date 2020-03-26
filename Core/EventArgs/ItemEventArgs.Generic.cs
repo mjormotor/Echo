@@ -6,15 +6,16 @@ namespace Echo
 	///	データを持つイベント引数
 	/// </summary>
 	[System.Diagnostics.DebuggerDisplay("{Item}")]
-	public class ItemEventArgs<T> : EventArgs, IReadOnlyItemShell<T>
+	public class ItemEventArgs<T> : EventArgs
 	{
 		public ItemEventArgs(T item)
 		{
 			Item = item;
 		}
 
-		#region IReadOnlyItemShell<T> interface support
+		/// <summary>
+		/// 要素
+		/// </summary>
 		public T Item { get; }
-		#endregion  // IReadOnlyItemShell<T> interface support
 	}
 }

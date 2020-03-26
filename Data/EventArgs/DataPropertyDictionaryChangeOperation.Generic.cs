@@ -29,46 +29,40 @@
 		}
 
 		/// <summary>
-		/// キー
-		/// </summary>
-		public TKey Key { get; set; }
-
-		/// <summary>
-		/// 移動先のキー
-		/// </summary>
-		public TKey MovingKey { get; set; }
-
-		/// <summary>
 		/// 設定値
 		/// </summary>
-		public DataPropertyValueContext<TValue> SettingValue { get; }
+		public DataPropertyDictionaryValueContext<TKey, TValue> SettingValue { get; }
 
 		#region IReadOnlyDataPropertyDictionaryChangeOperation<TKey, TValue> interface support
-		#region IReadOnlyDataPropertyCollectionChangeOperation<TValue> interface support
-		IReadOnlyDataPropertyValueContext<TValue> IReadOnlyDataPropertyCollectionChangeOperation<TValue>.SettingValue => SettingValue;
-		#endregion  // IReadOnlyDataPropertyCollectionChangeOperation<TValue> interface support
+		IReadOnlyDataPropertyDictionaryValueContext<TKey, TValue> IReadOnlyDataPropertyDictionaryChangeOperation<TKey, TValue>.SettingValue => SettingValue;
 		#endregion  // IReadOnlyDataPropertyDictionaryChangeOperation<TKey, TValue> interface support
 
 		#region internal members
 		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Insert(int index, TKey key, DataProperty<TValue> property)
 		{
-			var settingValue = new DataPropertyValueContext<TValue>(property);
-			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Insert, index, key, settingValue);
+			var settingValue = new DataPropertyDictionaryValueContext<TKey, TValue>(key, property);
+			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Insert, index, settingValue);
 		}
 
-		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Remove(int index, TKey key)
+		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Remove(int index)
 		{
-			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Remove, index, key);
+			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Remove, index);
 		}
 
-		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Move(int index, TKey key, int movingIndex, TKey movingKey)
+		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Move(int index, int movingIndex)
 		{
-			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Move, index, key, movingIndex, movingKey);
+			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Move, index, movingIndex);
 		}
 
-		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Swap(int index, TKey key, int movingIndex, TKey movingKey)
+		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Set(int index, TKey oldKey, TValue oldValue, TKey inputKey, TValue inputValue, DataProperty<TValue> property)
 		{
-			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Swap, index, key, movingIndex, movingKey);
+			var settingValue = new DataPropertyDictionaryValueContext<TKey, TValue>(oldKey, oldValue, inputKey, inputValue, property);
+			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Set, index, settingValue);
+		}
+
+		internal static DataPropertyDictionaryChangeOperation<TKey, TValue> Swap(int index, int movingIndex)
+		{
+			return new DataPropertyDictionaryChangeOperation<TKey, TValue>(DataPropertyCollectionChangeAction.Swap, index, movingIndex);
 		}
 		#endregion // internal members
 
@@ -76,20 +70,18 @@
 		private int index;
 		private int movingIndex;
 
-		private DataPropertyDictionaryChangeOperation(DataPropertyCollectionChangeAction action, int index, TKey key, DataPropertyValueContext<TValue> settingValue = null)
-			: this(action, index, key, -1, default(TKey), settingValue)
+		private DataPropertyDictionaryChangeOperation(DataPropertyCollectionChangeAction action, int index, DataPropertyDictionaryValueContext<TKey, TValue> settingValue = null)
+			: this(action, index, -1, settingValue)
 		{
 			SettingValue = settingValue;
 		}
 
-		private DataPropertyDictionaryChangeOperation(DataPropertyCollectionChangeAction action, int index, TKey key, int movingIndex, TKey movingKey, DataPropertyValueContext<TValue> settingValue = null)
+		private DataPropertyDictionaryChangeOperation(DataPropertyCollectionChangeAction action, int index, int movingIndex, DataPropertyDictionaryValueContext<TKey, TValue> settingValue = null)
 		{
 			this.index = index;
 			this.movingIndex = movingIndex;
 
 			Action = action;
-			Key = key;
-			MovingKey = movingKey;
 			SettingValue = settingValue;
 		}
 		#endregion // private members

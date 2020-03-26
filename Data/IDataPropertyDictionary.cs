@@ -7,7 +7,7 @@ namespace Echo.Data
 	/// <summary>
 	/// データプロパティ辞書
 	/// </summary>
-	public interface IDataPropertyDictionary : IReadOnlyList<IDataPropertyShell>, IDictionary, IReadOnlyIndexer<int, IDataPropertyShell>, IDataPropertyCore
+	public interface IDataPropertyDictionary : IReadOnlyList<IReadOnlyShell<IDataProperty>>, IDictionary, IReadOnlyIndexer<int, IReadOnlyShell<IDataProperty>>, IDataPropertyCore
 	{
 		/// <summary>
 		/// プロパティ辞書変更前

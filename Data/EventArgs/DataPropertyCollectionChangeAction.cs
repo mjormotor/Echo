@@ -6,6 +6,11 @@
 	public enum DataPropertyCollectionChangeAction
 	{
 		/// <summary>
+		/// 設定
+		/// </summary>
+		Set,
+
+		/// <summary>
 		/// 挿入
 		/// </summary>
 		Insert,

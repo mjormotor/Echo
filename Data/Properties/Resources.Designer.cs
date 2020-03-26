@@ -61,6 +61,42 @@ namespace Echo.Data.Properties {
         }
         
         /// <summary>
+        ///   &apos;{0}&apos; value must be not a descendant of &apos;{1}&apos; value. に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        internal static string MESSAGE_EXCEPTION_ARGUMENT_PARENT_TO_DESCENDANT_FORMAT {
+            get {
+                return ResourceManager.GetString("MESSAGE_EXCEPTION_ARGUMENT_PARENT_TO_DESCENDANT_FORMAT", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   &apos;{0}&apos; value must be different from &apos;{1}&apos; value. に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        internal static string MESSAGE_EXCEPTION_ARGUMENT_SAME_TARGET_FORMAT {
+            get {
+                return ResourceManager.GetString("MESSAGE_EXCEPTION_ARGUMENT_SAME_TARGET_FORMAT", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   &apos;{0}&apos; value must be any registered item of the collection. に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        internal static string MESSAGE_EXCEPTION_ARGUMENT_TARGET_UNCONTAINED_ITEM_FORMAT {
+            get {
+                return ResourceManager.GetString("MESSAGE_EXCEPTION_ARGUMENT_TARGET_UNCONTAINED_ITEM_FORMAT", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Organization was modified; enumeration operation may not execute. に類似しているローカライズされた文字列を検索します。
+        /// </summary>
+        internal static string MESSAGE_EXCEPTION_INVALID_OPERATION_KEEP_ENUMERATION_WITH_MODIFIED_ORGANIZATION {
+            get {
+                return ResourceManager.GetString("MESSAGE_EXCEPTION_INVALID_OPERATION_KEEP_ENUMERATION_WITH_MODIFIED_ORGANIZATION", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Mutating {0} derived from {1} is not allowed. に類似しているローカライズされた文字列を検索します。
         /// </summary>
         internal static string MESSAGE_EXCEPTION_NOT_SUPPORTED_MUTATE_ITEM_COLLECTION_FORMAT {
