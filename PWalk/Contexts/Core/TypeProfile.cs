@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -46,6 +47,40 @@ namespace Echo.PWalkService.Core
 		public IEnumerable<PWalkOptionDataAttribute> OptionData => this.optionData;
 
 		#region private members
+		private static readonly PropertyInfo ListIndexer = PrepareListIndexer();
+		private static readonly PropertyInfo DictionaryIndexer = PrepareDictionaryIndexer();
+
+		private static PropertyInfo PrepareListIndexer()
+		{
+			PropertyInfo ret = null;
+			foreach (var property in typeof(IList).GetProperties())
+			{
+				var parameters = property.GetIndexParameters();
+				if (parameters.Length == 1)
+				{
+					ret = property;
+				}
+			}
+
+			return ret;
+		}
+
+		private static PropertyInfo PrepareDictionaryIndexer()
+		{
+			PropertyInfo ret = null;
+			foreach (var property in typeof(IDictionary).GetProperties())
+			{
+				var parameters = property.GetIndexParameters();
+				if (parameters.Length == 1)
+				{
+					ret = property;
+					break;
+				}
+			}
+
+			return ret;
+		}
+
 		private Dictionary<string, MemberValueProfile> memberValues = new Dictionary<string, MemberValueProfile>();
 		private List<MemberFunctionProfile> memberFunctions = new List<MemberFunctionProfile>();
 		private List<PWalkAttribute> attributes = new List<PWalkAttribute>();
@@ -101,6 +136,27 @@ namespace Echo.PWalkService.Core
 						var property = (PropertyInfo)member;
 						this.memberValues.Add(member.Name, new MemberValueProfile(property));
 						break;
+				}
+			}
+
+			if (typeof(IDictionary).IsAssignableFrom(Type))
+			{
+				if (!this.memberValues.Values.Any(_ => _.Archetype == Archetype.Dictionary))
+				{
+					if (!this.memberValues.ContainsKey(DictionaryIndexer.Name))
+					{
+						this.memberValues.Add(DictionaryIndexer.Name, new MemberValueProfile(DictionaryIndexer));
+					}
+				}
+			}
+			else if (typeof(IList).IsAssignableFrom(Type))
+			{
+				if (!this.memberValues.Values.Any(_ => _.Archetype == Archetype.Collection))
+				{
+					if (!this.memberValues.ContainsKey(ListIndexer.Name))
+					{
+						this.memberValues.Add(ListIndexer.Name, new MemberValueProfile(ListIndexer));
+					}
 				}
 			}
 		}

@@ -13,6 +13,8 @@ namespace Echo.PWalkService.Core
 
 		public object[] Parameters { get; set; }
 
+		public IList<Type> KeepOutTypes { get; set; }
+
 		public Func<Type, object, string> SolveDictionaryItemNodeNameDelegate { get; set; }
 	}
 }

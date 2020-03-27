@@ -21,19 +21,6 @@ namespace Echo.Data
 		[System.Diagnostics.DebuggerTypeProxy(typeof(DataPropertyCollection<>.CollectionOperator.DebugView))]
 		public class CollectionOperator : IReadOnlyList<T>, IDisposable
 		{
-			public CollectionOperator(DataPropertyCollection<T> owner)
-			{
-				if (owner == null)
-				{
-					throw new ArgumentNullException(nameof(owner));
-				}
-
-				this.owner = owner;
-				this.block = this.owner.BlockReentrancy();
-
-				Shells = new List<Shell>(owner.Items.Select(_ => new Shell(_)));
-			}
-
 			public void Add(T value) => InsertItem(Count, value);
 
 			public void AddRange(IEnumerable<T> values) => InsertItems(Count, values);
@@ -155,6 +142,16 @@ namespace Echo.Data
 				}
 			}
 			#endregion  // IDisposable interface support
+
+			#region internal members
+			internal CollectionOperator(DataPropertyCollection<T> owner)
+			{
+				this.owner = owner;
+				this.block = this.owner.BlockReentrancy();
+
+				Shells = new List<Shell>(owner.Items.Select(_ => new Shell(_)));
+			}
+			#endregion // internal members
 
 			#region protected members
 			#region class Shell

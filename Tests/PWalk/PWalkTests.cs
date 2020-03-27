@@ -46,7 +46,7 @@ namespace Echo.PWalkService.Tests
 		{
 			var root = new Root();
 
-			PWalk.InvokeMarkedWith<FuncMarkAttribute>(root, new object[] { PWalk.ProxyParameter.Mark, });
+			PWalk.InvokeMarkedWith<FuncMarkAttribute>(root, new object[] { PWalkProxyParameter.Mark, });
 
 			Assert.IsTrue(root.FuncHolder.Text == Target3.VisitedText);
 		}
@@ -65,7 +65,7 @@ namespace Echo.PWalkService.Tests
 			};
 
 			root.FuncHolder.Visited += handler;
-			PWalk.InvokeMarkedWith<EventMarkAttribute>(root, new object[] { PWalk.ProxyParameter.Current, new ItemEventArgs<string>(VisitedText) });
+			PWalk.InvokeMarkedWith<EventMarkAttribute>(root, new object[] { PWalkProxyParameter.Current, new ItemEventArgs<string>(VisitedText) });
 			root.FuncHolder.Visited -= handler;
 
 			Assert.IsTrue(invokeCount == 1);

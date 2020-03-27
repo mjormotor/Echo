@@ -155,29 +155,6 @@ namespace Echo.Data.Tests
 		[TestMethod]
 		public void ExceptionMessageTest()
 		{
-			System.Diagnostics.Debug.WriteLine($"> {nameof(Dictionary)}.{nameof(Dictionary.KeyCollection)}.{nameof(Dictionary.KeyCollection)}(null)");
-			try
-			{
-				var keyCollection = new Dictionary.KeyCollection(null);
-			}
-			catch (ArgumentNullException ex)
-			{
-				System.Diagnostics.Debug.WriteLine(ex.Message);
-			}
-			System.Diagnostics.Debug.WriteLine(string.Empty);
-
-			System.Diagnostics.Debug.WriteLine($"> {nameof(DataPropertyDictionary)}.{nameof(DataPropertyDictionary.KeyCollection)}.{nameof(DataPropertyDictionary.KeyCollection)}(null)");
-			try
-			{
-				var keyCollection = new DataPropertyDictionary.KeyCollection(null);
-			}
-			catch (ArgumentNullException ex)
-			{
-				System.Diagnostics.Debug.WriteLine(ex.Message);
-			}
-			System.Diagnostics.Debug.WriteLine(string.Empty);
-			System.Diagnostics.Debug.WriteLine(string.Empty);
-
 			System.Diagnostics.Debug.WriteLine($"> {nameof(Dictionary)}.{nameof(Dictionary.KeyCollection)}.{nameof(ICollection<object>.Add)}(null)");
 			try
 			{

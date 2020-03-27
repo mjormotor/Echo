@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Xml;
 using System.Xml.Schema;
@@ -83,7 +84,7 @@ namespace Echo.Data
 			document.DocumentElement.SetAttribute("xmlns:xsd", XmlSchema.Namespace);
 
 			var context = new DataPropertySerializeContext() { TargetElement = element, };
-			PWalk.TargetType<IDataPropertyCore>(SerializeWalk, data, context, 1, PWalk.Option.CallProcessAlsoOnWayBack | PWalk.Option.CheckLoop | PWalk.Option.CheckVisit);
+			PWalk.TargetType<IDataPropertyCore>(SerializeWalk, data, context, 1, PWalkOption.CallProcessAlsoOnWayBack | PWalkOption.CheckLoop | PWalkOption.CheckVisit);
 
 			if (document.PreserveWhitespace && writerSettings != null)
 			{
@@ -132,6 +133,100 @@ namespace Echo.Data
 		private const string CodeAttributeName = "code";
 		private const string ReferenceAttributeName = "reference";
 		private const string ArchetypeAttributeName = "archetype";
+
+		private static readonly PWalkManager PWalk = new PWalkManager() { SolveDictionaryItemNodeNameDelegate = SolveDictionaryItemNodeName, };
+
+		private static string SolveDictionaryItemNodeName(Type type, object value)
+		{
+			if (type == typeof(string))
+			{
+				return (string)value;
+			}
+			else if (type == typeof(bool))
+			{
+				return XmlConvert.ToString((bool)value);
+			}
+			else if (type == typeof(char))
+			{
+				return XmlConvert.ToString((char)value);
+			}
+			else if (type == typeof(sbyte))
+			{
+				return XmlConvert.ToString((sbyte)value);
+			}
+			else if (type == typeof(byte))
+			{
+				var byteValue = (byte)value;
+				return byteValue.ToString("X02");
+			}
+			else if (type == typeof(short))
+			{
+				return XmlConvert.ToString((short)value);
+			}
+			else if (type == typeof(ushort))
+			{
+				return XmlConvert.ToString((ushort)value);
+			}
+			else if (type == typeof(int))
+			{
+				return XmlConvert.ToString((int)value);
+			}
+			else if (type == typeof(uint))
+			{
+				return XmlConvert.ToString((uint)value);
+			}
+			else if (type == typeof(long))
+			{
+				return XmlConvert.ToString((long)value);
+			}
+			else if (type == typeof(ulong))
+			{
+				return XmlConvert.ToString((ulong)value);
+			}
+			else if (type == typeof(float))
+			{
+				return XmlConvert.ToString((float)value);
+			}
+			else if (type == typeof(double))
+			{
+				return XmlConvert.ToString((double)value);
+			}
+			else if (type == typeof(decimal))
+			{
+				return XmlConvert.ToString((decimal)value);
+			}
+			else if (type == typeof(DateTime))
+			{
+				return XmlConvert.ToString((DateTime)value, XmlDateTimeSerializationMode.Local);
+			}
+			else if (type == typeof(Guid))
+			{
+				return XmlConvert.ToString((byte)value);
+			}
+			else if (type == typeof(TimeSpan))
+			{
+				return XmlConvert.ToString((Guid)value);
+			}
+			else if (type == typeof(DateTimeOffset))
+			{
+				return XmlConvert.ToString((DateTimeOffset)value);
+			}
+			else if (type.IsEnum)
+			{
+				var isFlag = type.IsDefined(typeof(FlagsAttribute), false);
+				if (!isFlag)
+				{
+					return EnumHelper.ToPrimalName(value);
+				}
+				else
+				{
+					var flags = new List<object>(EnumHelper.ToFlags(value));
+					return string.Join('|', flags.Select(_ => EnumHelper.ToPrimalName(_)));
+				}
+			}
+
+			return null;
+		}
 
 		private static void SerializeWalk(IDataPropertyCore current, PWalkContext pwalk)
 		{
@@ -224,7 +319,7 @@ namespace Echo.Data
 
 			var childRootPath = $"{context.RootPath}{pwalk.CurrentNode.Path}/Value";
 			var childContext = new DataPropertySerializeContext(context.ReferencedPaths) { TargetElement = node, RootPath = childRootPath, };
-			PWalk.TargetType<IDataPropertyCore>(SerializeWalk, data, childContext, 1, PWalk.Option.CallProcessAlsoOnWayBack | PWalk.Option.CheckLoop | PWalk.Option.CheckVisit);
+			PWalk.TargetType<IDataPropertyCore>(SerializeWalk, data, childContext, 1, PWalkOption.CallProcessAlsoOnWayBack | PWalkOption.CheckLoop | PWalkOption.CheckVisit);
 		}
 
 		private static void SerializePropertyCore(XmlElement element, IDataProperty property, PWalkContext pwalk)
