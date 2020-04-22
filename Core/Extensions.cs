@@ -114,6 +114,50 @@ namespace Echo
 		}
 
 		/// <summary>
+		/// 羅列
+		/// </summary>
+		public static IEnumerable<T> EnumerateWith<T>(this T self, params T[] succeeded)
+		{
+			yield return self;
+			foreach (var item in succeeded)
+			{
+				yield return item;
+			}
+		}
+
+		/// <summary>
+		/// 網羅
+		/// </summary>
+		public static IEnumerable<T> Align<T>(this IEnumerable<IEnumerable<T>> self)
+		{
+			return self.Aggregate((accumulate, _) => accumulate.Concat(_));
+		}
+
+		/// <summary>
+		/// 網羅
+		/// </summary>
+		public static IEnumerable<T> Align<T>(this T self, Func<T, IEnumerable<T>> vary)
+		{
+			return vary(self);
+		}
+
+		/// <summary>
+		/// 網羅
+		/// </summary>
+		public static IEnumerable<T> Align<T>(this IEnumerable<T> self, Func<T, IEnumerable<T>> vary)
+		{
+			return self.Select(_ => vary(_)).Align();
+		}
+
+		/// <summary>
+		/// 番号の賦与
+		/// </summary>
+		public static IEnumerable<(T, int)> WithIndices<T>(this IEnumerable<T> self)
+		{
+			return self.Select((_, index) => (_, index));
+		}
+
+		/// <summary>
 		/// 該当するキーの収集
 		/// </summary>
 		public static IEnumerable<TKey> FetchKeys<TKey, TValue>(this IEnumerable<KeyValuePair<TKey, TValue>> self, TValue value)

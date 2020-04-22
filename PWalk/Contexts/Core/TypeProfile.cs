@@ -47,10 +47,10 @@ namespace Echo.PWalkService.Core
 		public IEnumerable<PWalkOptionDataAttribute> OptionData => this.optionData;
 
 		#region private members
-		private static readonly PropertyInfo ListIndexer = PrepareListIndexer();
-		private static readonly PropertyInfo DictionaryIndexer = PrepareDictionaryIndexer();
+		private static readonly Lazy<PropertyInfo> ListIndexer = new Lazy<PropertyInfo>(GenerateListIndexer);
+		private static readonly Lazy<PropertyInfo> DictionaryIndexer = new Lazy<PropertyInfo>(GenerateDictionaryIndexer);
 
-		private static PropertyInfo PrepareListIndexer()
+		private static PropertyInfo GenerateListIndexer()
 		{
 			PropertyInfo ret = null;
 			foreach (var property in typeof(IList).GetProperties())
@@ -65,7 +65,7 @@ namespace Echo.PWalkService.Core
 			return ret;
 		}
 
-		private static PropertyInfo PrepareDictionaryIndexer()
+		private static PropertyInfo GenerateDictionaryIndexer()
 		{
 			PropertyInfo ret = null;
 			foreach (var property in typeof(IDictionary).GetProperties())
@@ -143,9 +143,10 @@ namespace Echo.PWalkService.Core
 			{
 				if (!this.memberValues.Values.Any(_ => _.Archetype == Archetype.Dictionary))
 				{
-					if (!this.memberValues.ContainsKey(DictionaryIndexer.Name))
+					var indexer = DictionaryIndexer.Value;
+					if (!this.memberValues.ContainsKey(indexer.Name))
 					{
-						this.memberValues.Add(DictionaryIndexer.Name, new MemberValueProfile(DictionaryIndexer));
+						this.memberValues.Add(indexer.Name, new MemberValueProfile(indexer));
 					}
 				}
 			}
@@ -153,9 +154,10 @@ namespace Echo.PWalkService.Core
 			{
 				if (!this.memberValues.Values.Any(_ => _.Archetype == Archetype.Collection))
 				{
-					if (!this.memberValues.ContainsKey(ListIndexer.Name))
+					var indexer = ListIndexer.Value;
+					if (!this.memberValues.ContainsKey(indexer.Name))
 					{
-						this.memberValues.Add(ListIndexer.Name, new MemberValueProfile(ListIndexer));
+						this.memberValues.Add(indexer.Name, new MemberValueProfile(indexer));
 					}
 				}
 			}

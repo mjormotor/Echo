@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -6,7 +7,6 @@ using System.Reflection;
 namespace Echo.PWalkService
 {
 	using Core;
-    using System.Collections;
 
 	/// <summary>
 	/// プロパティ探索
