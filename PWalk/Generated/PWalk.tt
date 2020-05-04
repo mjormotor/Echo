@@ -1,0 +1,1490 @@
+﻿﻿<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ assembly name="netstandard" #>
+<#@ assembly name="System.Core" #>
+<#@ import namespace="System" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System.Text" #>
+<#@ assembly name="$(TargetDir)Echo.Core.dll" #>
+<#@ import namespace="Echo" #>
+<#@ output extension=".cs" #>
+<# const int MaxRank = 4; #>
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+
+namespace Echo.PWalkService
+{
+	using Core;
+
+	/// <summary>
+	/// プロパティ探索
+	/// </summary>
+	/// <remarks>
+	/// 入力されたオブジェクトのプロパティを探索し、それに対する処理を実行します。
+	/// </remarks>
+	public static class PWalk
+	{
+		public const int InfiniteStep = -1;
+
+		/// <summary>
+		/// キャッシュの有効化
+		/// </summary>
+		/// <remarks>
+		/// 型解析の情報をキャッシュすることで、次回の処理を高速化できます。
+		/// その代わり、メモリを使用します。
+		/// </remarks>
+		public static bool EnableUsingCache
+		{
+			get
+			{
+				return TypeProfileHelper.EnableUsingCache;
+			}
+
+			set
+			{
+				TypeProfileHelper.EnableUsingCache = value;
+			}
+		}
+
+		/// <summary>
+		/// 探索禁止の型リスト
+		/// </summary>
+		/// <remarks>
+		/// ここに追加されている型の持つプロパティは探索しません。
+		/// 
+		/// 他の型がここに追加されている型のプロパティを持っている場合、そのプロパティ自体は探索されますが、
+		/// そのプロパティ値からさらに中のプロパティは探索されません。
+		/// </remarks>
+		public static IList<Type> KeepOutTypes => Instance.KeepOutTypes;
+
+		/// <summary>
+		/// 辞書の要素ノード名の解決デリゲート
+		/// </summary>
+		/// <remarks>
+		/// ここに追加されている型の持つプロパティは探索しません。
+		/// 
+		/// 他の型がここに追加されている型のプロパティを持っている場合、そのプロパティ自体は探索されますが、
+		/// そのプロパティ値からさらに中のプロパティは探索されません。
+		/// </remarks>
+		public static Func<Type, object, string> SolveDictionaryItemNodeNameDelegate
+		{
+			get { return Instance.SolveDictionaryItemNodeNameDelegate; }
+			set { Instance.SolveDictionaryItemNodeNameDelegate = value; }
+		}
+		
+<#= PWalk.GenerateEveryNodeCode() #>
+<#= PWalk.GenerateEveryNodeIfCode() #>
+<#= PWalk.GenerateTargetTypeCode() #>
+<# for (int rank = 2; rank <= MaxRank; ++rank) { #>
+<#= PWalk.GenerateTargetTypeCode(rank) #>
+<# } #>
+<#= PWalk.GenerateMarkedWithCode() #>
+<# for (int rank = 2; rank <= MaxRank; ++rank) { #>
+<#= PWalk.GenerateMarkedWithCode(rank) #>
+<# } #>
+<#= PWalk.GenerateInvokeMarkedWithCode() #>
+<# for (int rank = 2; rank <= MaxRank; ++rank) { #>
+<#= PWalk.GenerateInvokeMarkedWithCode(rank) #>
+<# } #>
+		/// <summary>
+		/// パスによるノードの探索
+		/// </summary>
+		/// <param name="path">パス</param>
+		/// <param name="subject">探索の根</param>
+		/// <returns>探索の成功判定</returns>
+		/// <remarks>
+		/// パスで一意に確定するノードを探索し、コンテキストに探索結果を記録します。
+		/// </remarks>
+		/// <exception cref="System.ArgumentNullException">入力パスが null</exception>
+		public static FindResult FindNode(string path, object subject)
+			=> Instance.FindNode(path, subject);
+
+		/// <summary>
+		/// パスによるノードの探索再開
+		/// </summary>
+		/// <param name="path">パス</param>
+		/// <param name="context">コンテキスト</param>
+		/// <returns>探索の成功判定</returns>
+		/// <remarks>
+		/// パスで一意に確定するノードを探索し、コンテキストに探索結果を記録します。
+		/// 書き込み済みのコンテキストを入力すると、その続きから探索を開始します。
+		/// </remarks>
+		/// <exception cref="System.ArgumentNullException">入力パスが null</exception>
+		public static FindResult FindNode(string path, PWalkContext context)
+			=> Instance.FindNode(path, context);
+
+		#region internal members
+		internal static IEnumerable<Type> GenerateKeepOutTypesDefault()
+		{
+			yield return typeof(string);
+			yield return typeof(Guid);
+			yield return typeof(Type);
+		}
+
+		internal static string SolveDictionaryItemNodeNameDefault(Type type, object value)
+		{
+			if (type == typeof(string))
+			{
+				return (string)value;
+			}
+
+			return null;
+		}
+
+		internal static void WalkCore(Func<object, PWalkContext, bool> condition, Action<object, PWalkContext> process, object current, PWalkContext context, int step, PWalkOption options)
+		{
+			Func<object, PWalkContext, bool>[] conditions = { condition, };
+			Action<object, PWalkContext>[] processes = { process, };
+			WalkCore(conditions, processes, current, context, step, options);
+		}
+
+		internal static void WalkCore(Func<object, PWalkContext, bool>[] conditions, Action<object, PWalkContext>[] processes, object current, PWalkContext context, int step, PWalkOption options)
+		{
+			var currentType = current?.GetType();
+			var profile = current != null ? currentType.Profile() : null;
+
+			var node = new Node(context.Core, context.Nodes.Count, current, profile);
+			context.Core.Nodes.Add(node);
+			context.Core.CurrentStep = step;
+			context.NextStep = step > 0 ? step - 1 : step;
+
+			foreach (var attribute in node.FetchAttributes())
+			{
+				attribute.Visit(current, context);
+			}
+
+			for (var index = 0; index < processes.Length; ++index)
+			{
+				var condition = conditions[index];
+				var process = processes[index];
+				if (condition(current, context))
+				{
+					process(current, context);
+				}
+			}
+
+			if (context.Core.SystemData.MarkTypes.Count > 0)
+			{
+				foreach (var mark in node.FetchValueMarks())
+				{
+					for (var index = 0; index < context.Core.SystemData.MarkTypes.Count; ++index)
+					{
+						if (context.Core.SystemData.MarkTypes[index].IsAssignableFrom(mark.GetType()))
+						{
+							context.Core.CurrentMark = mark;
+							processes[index](current, context);
+							context.Core.CurrentMark = null;
+						}
+					}
+				}
+			}
+
+			if (context.Core.SystemData.InvokeMarkTypes.Count > 0)
+			{
+				for (var index = 0; index < context.Core.SystemData.InvokeMarkTypes.Count; ++index)
+				{
+					var markType = context.Core.SystemData.InvokeMarkTypes[index];
+					foreach (var function in node.FetchMarkedFunctions())
+					{
+						foreach (var mark in function.Marks.Where(_ => markType.IsAssignableFrom(_.GetType())))
+						{
+							context.Core.CurrentMark = mark;
+							function.Invoke[current](SolveParameters(context.Core.SystemData.Parameters, current, context, mark));
+							context.Core.CurrentMark = null;
+						}
+					}
+				}
+			}
+
+			if (current != null &&
+				!currentType.IsPrimitive &&
+				!currentType.IsEnum &&
+				!context.Core.SystemData.KeepOutTypes.Any(_ => _.IsAssignableFrom(currentType)))
+			{
+				var checkLoop = (options & PWalkOption.CheckLoop) == PWalkOption.CheckLoop;
+				var checkVisit = (options & PWalkOption.CheckVisit) == PWalkOption.CheckVisit;
+
+				if (step != 0 || context.NextStep != 0)
+				{
+					if (checkVisit)
+					{
+						context.Core.Visit.Add(current);
+					}
+
+					foreach (var member in profile.MemberValues.Values)
+					{
+						object child = null;
+						try
+						{
+							child = member.Value[current];
+						}
+						catch (TargetInvocationException)
+						{
+							// 取得不能
+							return;
+						}
+
+						if (child != null)
+						{
+							if (checkLoop)
+							{
+								if (context.Nodes.Any(_ => ReferenceEquals(_, current)))
+								{
+									// ループしているので、探索しない。
+									return;
+								}
+							}
+
+							if (checkVisit)
+							{
+								if (context.Core.Visit.Any(_ => ReferenceEquals(_, child)))
+								{
+									// 検証済みなので、探索しない。
+									return;
+								}
+							}
+						}
+
+						var link = new Link(context.Core, context.Links.Count, member);
+						context.Core.Links.Add(link);
+
+						WalkCore(conditions, processes, child, context, context.NextStep, options);
+
+						context.Core.Links.RemoveAt(context.Links.Count - 1);
+					}
+				}
+
+				if (current is IDictionary dictionary)
+				{
+					var index = 0;
+					var enumerator = dictionary.GetEnumerator();
+					while (enumerator.MoveNext())
+					{
+						var child = enumerator.Value;
+						if (child != null)
+						{
+							if (checkLoop)
+							{
+								if (context.Nodes.Any(_ => ReferenceEquals(_, current)))
+								{
+									// ループしているので、探索しない。
+									continue;
+								}
+							}
+
+							if (checkVisit)
+							{
+								if (context.Core.Visit.Any(_ => ReferenceEquals(_, child)))
+								{
+									// 検証済みなので、探索しない。
+									continue;
+								}
+							}
+						}
+
+						var link = new Link(context.Core, context.Links.Count, node.IndexerMemberProfile) { Index = index++, KeyType = profile.DictionaryKeyType ?? typeof(object), Key = enumerator.Key, };
+						context.Core.Links.Add(link);
+
+						WalkCore(conditions, processes, child, context, step, options);
+
+						context.Core.Links.RemoveAt(context.Links.Count - 1);
+					}
+				}
+				else if (current is IEnumerable enumerable)
+				{
+					var index = 0;
+					foreach (var child in enumerable)
+					{
+						if (child != null)
+						{
+							if (checkLoop)
+							{
+								if (context.Nodes.Any(_ => ReferenceEquals(_, current)))
+								{
+									// ループしているので、探索しない。
+									continue;
+								}
+							}
+
+							if (checkVisit)
+							{
+								if (context.Core.Visit.Any(_ => ReferenceEquals(_, child)))
+								{
+									// 検証済みなので、探索しない。
+									continue;
+								}
+							}
+						}
+
+						var link = new Link(context.Core, context.Links.Count, node.IndexerMemberProfile) { Index = index++, };
+						context.Core.Links.Add(link);
+
+						WalkCore(conditions, processes, child, context, step, options);
+
+						context.Core.Links.RemoveAt(context.Links.Count - 1);
+					}
+				}
+			}
+
+			if ((options & PWalkOption.CallProcessAlsoOnWayBack) == PWalkOption.CallProcessAlsoOnWayBack)
+			{
+				context.Core.States |= WalkState.WayBack;
+
+				if (context.Core.SystemData.InvokeMarkTypes.Count > 0)
+				{
+					for (var index = context.Core.SystemData.InvokeMarkTypes.Count - 1; index >= 0; --index)
+					{
+						var markType = context.Core.SystemData.InvokeMarkTypes[index];
+						foreach (var function in node.FetchMarkedFunctions().Reverse())
+						{
+							foreach (var mark in function.Marks.Where(_ => markType.IsAssignableFrom(_.GetType())).Reverse())
+							{
+								context.Core.CurrentMark = mark;
+								function.Invoke[current](SolveParameters(context.Core.SystemData.Parameters, current, context, mark));
+								context.Core.CurrentMark = null;
+							}
+						}
+					}
+				}
+
+				if (context.Core.SystemData.MarkTypes.Count > 0)
+				{
+					foreach (var mark in node.FetchValueMarks().Reverse())
+					{
+						for (var index = context.Core.SystemData.MarkTypes.Count - 1; index >= 0; --index)
+						{
+							if (context.Core.SystemData.MarkTypes[index].IsAssignableFrom(mark.GetType()))
+							{
+								context.Core.CurrentMark = mark;
+								processes[index](current, context);
+								context.Core.CurrentMark = null;
+							}
+						}
+					}
+				}
+
+				for (var index = processes.Length - 1; index >= 0; --index)
+				{
+					var condition = conditions[index];
+					var process = processes[index];
+					if (condition(current, context))
+					{
+						process(current, context);
+					}
+				}
+
+				context.Core.States &= ~WalkState.WayBack;
+			}
+
+			context.Core.Nodes.RemoveAt(context.Nodes.Count - 1);
+		}
+
+		internal static bool FindCore(string[] names, object current, PWalkContext context)
+		{
+			var currentType = current?.GetType();
+			var profile = current != null ? currentType.Profile() : null;
+
+			var node = new Node(context.Core, context.Nodes.Count, current, profile);
+			context.Core.Nodes.Add(node);
+
+			if (context.Nodes.Count == names.Length)
+			{
+				if (context.Nodes.Count == 1)
+				{
+					return string.IsNullOrEmpty(names[0]) || names[0] == node.Name;
+				}
+
+				return true;
+			}
+
+			var targetName = names[context.Nodes.Count];
+
+			if (profile.MemberValues.TryGetValue(targetName, out var member))
+			{
+				switch (member.Archetype)
+				{
+					case Archetype.Default:
+						object child = null;
+						try
+						{
+							child = member.Value[current];
+						}
+						catch (TargetInvocationException)
+						{
+							// 取得不能
+							return false;
+						}
+
+						var link = new Link(context.Core, context.Links.Count, member);
+						context.Core.Links.Add(link);
+
+						return FindCore(names, child, context);
+				}
+			}
+
+			if (current is IDictionary dictionary)
+			{
+				var ret = false;
+				var index = -1;
+				object key = null;
+				object child = null;
+
+				try
+				{
+					var sampleIndex = 0;
+					var enumerator = dictionary.GetEnumerator();
+					while (enumerator.MoveNext())
+					{
+						var sampleName = context.Core.SystemData.SolveDictionaryItemNodeNameDelegate(profile.DictionaryKeyType ?? typeof(object), enumerator.Key);
+						if (sampleName == targetName)
+						{
+							index = sampleIndex;
+							key = enumerator.Key;
+							child = enumerator.Value;
+							ret = true;
+							break;
+						}
+
+						++sampleIndex;
+					}
+				}
+				catch (TargetInvocationException)
+				{
+					// 取得不能
+					return false;
+				}
+
+				if (!ret)
+				{
+					if (int.TryParse(targetName, out index))
+					{
+						try
+						{
+							var sampleIndex = 0;
+							var enumerator = dictionary.GetEnumerator();
+							while (sampleIndex <= index)
+							{
+								enumerator.MoveNext();
+								++sampleIndex;
+							}
+
+							key = enumerator.Key;
+							child = enumerator.Value;
+							ret = true;
+						}
+						catch (TargetInvocationException)
+						{
+							// 取得不能
+							return false;
+						}
+					}
+				}
+
+				if (!ret)
+				{
+					return false;
+				}
+
+				var link = new Link(context.Core, context.Links.Count, member) { Index = index, KeyType = profile.DictionaryKeyType ?? typeof(object), Key = key, };
+				context.Core.Links.Add(link);
+
+				return FindCore(names, child, context);
+			}
+			else if (current is IEnumerable enumerable)
+			{
+				if (int.TryParse(targetName, out var index))
+				{
+					object child = null;
+					try
+					{
+						var enumerator = enumerable.GetEnumerator();
+						while (index-- >= 0)
+						{
+							enumerator.MoveNext();
+						}
+
+						child = enumerator.Current;
+					}
+					catch (TargetInvocationException)
+					{
+						// 取得不能
+						return false;
+					}
+
+					var link = new Link(context.Core, context.Links.Count, member);
+					context.Core.Links.Add(link);
+
+					return FindCore(names, child, context);
+				}
+			}
+
+			return false;
+		}
+		#endregion // internal members
+
+		#region private members
+		private static readonly PWalkManager Instance = new PWalkManager(GenerateKeepOutTypesDefault());
+
+		private static object[] SolveParameters(object[] parameters, object current, PWalkContext context, PWalkMarkAttribute mark)
+		{
+			object[] ret = null;
+			if (parameters != null)
+			{
+				if (parameters.Any(_ => _ is PWalkProxyParameter))
+				{
+					ret = new object[parameters.Length];
+					for (var index = 0; index < parameters.Length; ++index)
+					{
+						var parameter = parameters[index];
+						if (parameter is PWalkProxyParameter proxy)
+						{
+							switch (proxy)
+							{
+								case PWalkProxyParameter.Current:
+									parameter = current;
+									break;
+
+								case PWalkProxyParameter.Context:
+									parameter = context;
+									break;
+
+								case PWalkProxyParameter.Mark:
+									parameter = mark;
+									break;
+							}
+						}
+
+						ret[index] = parameter;
+					}
+				}
+				else
+				{
+					ret = parameters;
+				}
+			}
+
+			return ret;
+		}
+		#endregion // private members
+	}
+}
+<#@include file="PWalkGenerationHelper.tt" #>
+<#+
+static class PWalk
+{
+	public static string GenerateEveryNodeCode()
+	{
+		const string MethodName = "EveryNode";
+		var builder = new StringBuilder();
+		foreach (var processParametric in VaryParamtrics())
+		{
+			foreach (var parameters in VaryParameters())
+			{
+				builder.Append(GenerateCode(processParametric, parameters));
+			}
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.UserData;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method VaryParamtrics
+		IEnumerable<ParametricKind> VaryParamtrics()
+		{
+			yield return ParametricKind.Subjective;
+			yield return ParametricKind.Contextual;
+		}
+		#endregion // method VaryParamtrics
+
+		#region method GenerateCode
+		string GenerateCode(ParametricKind processParametric, OptionalParameter parameters)
+		{
+			if (processParametric == ParametricKind.Contextual && parameters == OptionalParameter.DefaultEveryNodeIf)
+			{
+				return Helper.GenerateEveryNodeIfDocumentComment(parameters) + GenerateSignature() + GenerateExpression();
+			}
+			return Helper.GenerateEveryNodeDocumentComment(parameters) + GenerateSignature() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append("(");
+				builder.Append(Helper.GenerateProcessTypeName(processParametric));
+				builder.Append(" process, ");
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("object userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append("(");
+				builder.Append("process, ");
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateEveryNodeIfCode()
+	{
+		const string MethodName = "EveryNodeIf";
+		var builder = new StringBuilder();
+		foreach ((var conditionParamtric, var processParamtrics) in VaryParamtrics())
+		{
+			foreach (var parameters in VaryParameters())
+			{
+				builder.Append(GenerateCode(conditionParamtric, processParamtrics, parameters));
+			}
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.UserData;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method VaryParamtrics
+		IEnumerable<(ParametricKind, ParametricKind)> VaryParamtrics()
+		{
+			foreach (var conditionParamtric in VaryConditionParamtrics())
+			{
+				foreach (var processParamtrics in VaryProcessParamtrics())
+				{
+					yield return (conditionParamtric, processParamtrics);
+				}
+			}
+
+			#region method VaryConditionParamtrics
+			IEnumerable<ParametricKind> VaryConditionParamtrics()
+			{
+				yield return ParametricKind.NonParametric;
+				yield return ParametricKind.Subjective;
+				yield return ParametricKind.Contextual;
+			}
+			#endregion // method VaryConditionParamtrics
+
+			#region method VaryProcessParamtrics
+			IEnumerable<ParametricKind> VaryProcessParamtrics()
+			{
+				yield return ParametricKind.Subjective;
+				yield return ParametricKind.Contextual;
+			}
+			#endregion // method VaryProcessParamtrics
+		}
+		#endregion // method VaryParamtrics
+
+		#region method GenerateCode
+		string GenerateCode(ParametricKind conditionParametric, ParametricKind processParametric, OptionalParameter parameters)
+		{
+			if (conditionParametric == ParametricKind.Contextual && processParametric == ParametricKind.Contextual && parameters == OptionalParameter.DefaultEveryNodeIf)
+			{
+				return Helper.GenerateEveryNodeIfDocumentComment(parameters) + GenerateSignature() + GenerateExpression();
+			}
+			return Helper.GenerateEveryNodeIfDocumentComment(parameters) + GenerateSignature() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append("(");
+				builder.Append(Helper.GenerateConditionTypeName(conditionParametric));
+				builder.Append(" condition, ");
+				builder.Append(Helper.GenerateProcessTypeName(processParametric));
+				builder.Append(" process, ");
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("object userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append("(");
+				builder.Append("condition, ");
+				builder.Append("process, ");
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateTargetTypeCode()
+	{
+		const string MethodName = "TargetType";
+		var builder = new StringBuilder();
+		foreach (var processParamtrics in VaryParamtrics())
+		{
+			foreach (var parameters in VaryParameters())
+			{
+				builder.Append(GenerateCode(processParamtrics, parameters));
+			}
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.UserData;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method VaryParamtrics
+		IEnumerable<ParametricKind> VaryParamtrics()
+		{
+			yield return ParametricKind.Subjective;
+			yield return ParametricKind.Contextual;
+		}
+		#endregion // method VaryParamtrics
+
+		#region method GenerateCode
+		string GenerateCode(ParametricKind processParametric, OptionalParameter parameters)
+		{
+			if (processParametric == ParametricKind.Contextual && parameters == OptionalParameter.DefaultTargetType)
+			{
+				return Helper.GenerateTargetTypeDocumentComment(parameters) + GenerateSignature() + GenerateExpression();
+			}
+			return Helper.GenerateTargetTypeDocumentComment(parameters) + GenerateSignature() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append("<T>");
+				builder.Append("(");
+				builder.Append(Helper.GenerateProcessTypeName("T", processParametric));
+				builder.Append(" process, ");
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("object userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append("(");
+				builder.Append("process, ");
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateTargetTypeCode(int rank)
+	{
+		const string MethodName = "TargetType";
+		var builder = new StringBuilder();
+		foreach (var processParamtrics in VaryParamtrics())
+		{
+			foreach (var parameters in VaryParameters())
+			{
+				builder.Append(GenerateCode(processParamtrics, parameters));
+			}
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.UserData;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method VaryParamtrics
+		IEnumerable<ParametricKind> VaryParamtrics()
+		{
+			yield return ParametricKind.Subjective;
+			yield return ParametricKind.Contextual;
+		}
+		#endregion // method VaryParamtrics
+
+		#region method GenerateCode
+		string GenerateCode(ParametricKind processParametric, OptionalParameter parameters)
+		{
+			if (processParametric == ParametricKind.Contextual && parameters == OptionalParameter.DefaultTargetType)
+			{
+				return Helper.GenerateTargetTypeDocumentComment(rank, parameters) + GenerateSignature() + GenerateExpression();
+			}
+			return Helper.GenerateTargetTypeDocumentComment(rank, parameters) + GenerateSignature() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append($"<{string.Join(", ", Enumerable.Range(1, rank).Select(_ => $"T{_}"))}>");
+				builder.Append("(");
+				for (var index = 1; index <= rank; ++index)
+				{
+					builder.Append(Helper.GenerateProcessTypeName($"T{index}", processParametric));
+					builder.Append($" process{index}, ");
+				}
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("object userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append("(");
+				for (var index = 1; index <= rank; ++index)
+				{
+					builder.Append($"process{index}, ");
+				}
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateMarkedWithCode()
+	{
+		const string MethodName = "MarkedWith";
+		var builder = new StringBuilder();
+		foreach (var processParamtrics in VaryParamtrics())
+		{
+			foreach (var parameters in VaryParameters())
+			{
+				builder.Append(GenerateCode(processParamtrics, parameters));
+			}
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.UserData;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method VaryParamtrics
+		IEnumerable<ParametricKind> VaryParamtrics()
+		{
+			yield return ParametricKind.Subjective;
+			yield return ParametricKind.Contextual;
+		}
+		#endregion // method VaryParamtrics
+
+		#region method GenerateCode
+		string GenerateCode(ParametricKind processParametric, OptionalParameter parameters)
+		{
+			if (processParametric == ParametricKind.Contextual && parameters == OptionalParameter.DefaultMarkedWith)
+			{
+				return Helper.GenerateMarkedWithDocumentComment(parameters) + GenerateSignature() + GenerateTypeConstraint() + GenerateExpression();
+			}
+			return Helper.GenerateMarkedWithDocumentComment(parameters) + GenerateSignature() + GenerateTypeConstraint() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append("<T>");
+				builder.Append("(");
+				builder.Append(Helper.GenerateProcessTypeName(processParametric));
+				builder.Append(" process, ");
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("object userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateTypeConstraint
+			string GenerateTypeConstraint()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("where ");
+				builder.Append("T");
+				builder.Append(" : PWalkMarkAttribute");
+				return builder.ToString();
+			}
+			#endregion // method GenerateTypeConstraint
+
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append("<T>");
+				builder.Append("(");
+				builder.Append("process, ");
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateMarkedWithCode(int rank)
+	{
+		const string MethodName = "MarkedWith";
+		var builder = new StringBuilder();
+		foreach (var processParamtrics in VaryParamtrics())
+		{
+			foreach (var parameters in VaryParameters())
+			{
+				builder.Append(GenerateCode(processParamtrics, parameters));
+			}
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.UserData;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method VaryParamtrics
+		IEnumerable<ParametricKind> VaryParamtrics()
+		{
+			yield return ParametricKind.Subjective;
+			yield return ParametricKind.Contextual;
+		}
+		#endregion // method VaryParamtrics
+
+		#region method GenerateCode
+		string GenerateCode(ParametricKind processParametric, OptionalParameter parameters)
+		{
+			if (processParametric == ParametricKind.Contextual && parameters == OptionalParameter.DefaultMarkedWith)
+			{
+				return Helper.GenerateMarkedWithDocumentComment(rank, parameters) + GenerateSignature() + GenerateTypeConstraints() + GenerateExpression();
+			}
+			return Helper.GenerateMarkedWithDocumentComment(rank, parameters) + GenerateSignature() + GenerateTypeConstraints() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append($"<{string.Join(", ", Enumerable.Range(1, rank).Select(_ => $"T{_}"))}>");
+				builder.Append("(");
+				for (var index = 1; index <= rank; ++index)
+				{
+					builder.Append(Helper.GenerateProcessTypeName(processParametric));
+					builder.Append($" process{index}, ");
+				}
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("object userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateTypeConstraints
+			string GenerateTypeConstraints()
+			{
+				var builder = new StringBuilder();
+				for (var index = 1; index <= rank; ++index)
+				{
+					builder.Append(GenerateTypeConstraint(index));
+				}
+				return builder.ToString();
+				
+				#region method GenerateTypeConstraint
+				string GenerateTypeConstraint(int index)
+				{
+					var builder = new StringBuilder(Helper.NewLine);
+					builder.Append(Helper.MethodIndent);
+					builder.Append("\t");
+					builder.Append("where ");
+					builder.Append($"T{index}");
+					builder.Append(" : PWalkMarkAttribute");
+					return builder.ToString();
+				}
+				#endregion // method GenerateTypeConstraint
+			}
+			#endregion // method GenerateTypeConstraints
+
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append($"<{string.Join(", ", Enumerable.Range(1, rank).Select(_ => $"T{_}"))}>");
+				builder.Append("(");
+				for (var index = 1; index <= rank; ++index)
+				{
+					builder.Append($"process{index}, ");
+				}
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.UserData) == OptionalParameter.UserData)
+				{
+					builder.Append("userData, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateInvokeMarkedWithCode()
+	{
+		const string MethodName = "InvokeMarkedWith";
+		var builder = new StringBuilder();
+		foreach (var parameters in VaryParameters())
+		{
+			builder.Append(GenerateCode(parameters));
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.Parameters;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method GenerateCode
+		string GenerateCode(OptionalParameter parameters)
+		{
+			if (parameters == OptionalParameter.DefaultInvokeMarkedWith)
+			{
+				return Helper.GenerateInvokeMarkedWithDocumentComment(parameters) + GenerateSignature() + GenerateTypeConstraint() + GenerateExpression();
+			}
+			return Helper.GenerateInvokeMarkedWithDocumentComment(parameters) + GenerateSignature() + GenerateTypeConstraint() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append("<T>");
+				builder.Append("(");
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.Parameters) == OptionalParameter.Parameters)
+				{
+					builder.Append("object[] parameters, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateTypeConstraint
+			string GenerateTypeConstraint()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("where ");
+				builder.Append("T");
+				builder.Append(" : PWalkMarkAttribute");
+				return builder.ToString();
+			}
+			#endregion // method GenerateTypeConstraint
+
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append("<T>");
+				builder.Append("(");
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.Parameters) == OptionalParameter.Parameters)
+				{
+					builder.Append("parameters, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+	
+	public static string GenerateInvokeMarkedWithCode(int rank)
+	{
+		const string MethodName = "InvokeMarkedWith";
+		var builder = new StringBuilder();
+		foreach (var parameters in VaryParameters())
+		{
+			builder.Append(GenerateCode(parameters));
+		}
+		return builder.ToString();
+		
+		#region method VaryParameters
+		IEnumerable<OptionalParameter> VaryParameters()
+		{
+			return EnumHelper.EnumerateCombinations(VaryOptions());
+
+			#region method VaryOptions
+			IEnumerable<OptionalParameter> VaryOptions()
+			{
+				yield return OptionalParameter.Parameters;
+				yield return OptionalParameter.Step;
+			}
+			#endregion // method VaryOptions
+		}
+		#endregion // method VaryParameters
+
+		#region method GenerateCode
+		string GenerateCode(OptionalParameter parameters)
+		{
+			if (parameters == OptionalParameter.DefaultInvokeMarkedWith)
+			{
+				return Helper.GenerateInvokeMarkedWithDocumentComment(parameters) + GenerateSignature() + GenerateTypeConstraints() + GenerateExpression();
+			}
+			return Helper.GenerateInvokeMarkedWithDocumentComment(parameters) + GenerateSignature() + GenerateTypeConstraints() + GenerateExpression() + Helper.NewLine;
+			
+			#region method GenerateSignature
+			string GenerateSignature()
+			{
+				var builder = new StringBuilder();
+				builder.Append(Helper.MethodIndent);
+				builder.Append("public ");
+				builder.Append("static ");
+				builder.Append("void ");
+				builder.Append(MethodName);
+				builder.Append($"<{string.Join(", ", Enumerable.Range(1, rank).Select(_ => $"T{_}"))}>");
+				builder.Append("(");
+				builder.Append("object subject, ");
+				if ((parameters & OptionalParameter.Parameters) == OptionalParameter.Parameters)
+				{
+					builder.Append("object[] parameters, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("int step, ");
+				}
+				builder.Append("PWalkOption options = PWalkOption.None");
+				builder.Append(")");
+				return builder.ToString();
+			}
+			#endregion // method GenerateSignature
+			
+			#region method GenerateTypeConstraints
+			string GenerateTypeConstraints()
+			{
+				var builder = new StringBuilder();
+				for (var index = 1; index <= rank; ++index)
+				{
+					builder.Append(GenerateTypeConstraint(index));
+				}
+				return builder.ToString();
+				
+				#region method GenerateTypeConstraint
+				string GenerateTypeConstraint(int index)
+				{
+					var builder = new StringBuilder(Helper.NewLine);
+					builder.Append(Helper.MethodIndent);
+					builder.Append("\t");
+					builder.Append("where ");
+					builder.Append($"T{index}");
+					builder.Append(" : PWalkMarkAttribute");
+					return builder.ToString();
+				}
+				#endregion // method GenerateTypeConstraint
+			}
+			#endregion // method GenerateTypeConstraints
+
+			#region method GenerateExpression
+			string GenerateExpression()
+			{
+				var builder = new StringBuilder(Helper.NewLine);
+				builder.Append(Helper.MethodIndent);
+				builder.Append("\t");
+				builder.Append("=> ");
+				builder.Append("Instance.");
+				builder.Append(MethodName);
+				builder.Append($"<{string.Join(", ", Enumerable.Range(1, rank).Select(_ => $"T{_}"))}>");
+				builder.Append("(");
+				builder.Append("subject, ");
+				if ((parameters & OptionalParameter.Parameters) == OptionalParameter.Parameters)
+				{
+					builder.Append("parameters, ");
+				}
+				if ((parameters & OptionalParameter.Step) == OptionalParameter.Step)
+				{
+					builder.Append("step, ");
+				}
+				builder.Append("options");
+				builder.Append(");");
+				builder.Append(Helper.NewLine);
+				return builder.ToString();
+			}
+			#endregion // method GenerateExpression
+		}
+		#endregion // method GenerateCode
+	}
+}
+#>

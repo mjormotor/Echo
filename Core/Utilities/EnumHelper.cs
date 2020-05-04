@@ -31,6 +31,66 @@ namespace Echo
 		}
 
 		/// <summary>
+		/// 組み合わせを列挙
+		/// </summary>
+		public static IEnumerable<T> EnumerateCombinations<T>()
+			where T : Enum
+		{
+			var profile = ProfileEnum(typeof(T));
+			return profile.Combinations.Cast<T>();
+		}
+
+		/// <summary>
+		/// 組み合わせを列挙
+		/// </summary>
+		public static IList<T> EnumerateCombinations<T>(IEnumerable<T> values)
+			where T : Enum
+		{
+			var ret = new List<T>();
+
+			var type = typeof(T);
+			var isFlag = type.IsDefined(typeof(FlagsAttribute), false);
+			if (isFlag)
+			{
+				var zero = (T)Enum.ToObject(type, 0x00000000);
+				if (Enum.IsDefined(type, 0x00000000))
+				{
+					ret.Add(zero);
+				}
+
+				foreach (var value in values.Aggregate(zero.Enumerate(), (accumlate, _) => Combine(accumlate, _)))
+				{
+					var code = value.GetHashCode();
+					if (code != 0x00000000 && !ret.Any(_ => _.GetHashCode() == code))
+					{
+						ret.Add(value);
+					}
+				}
+			}
+			else
+			{
+				foreach (var value in values)
+				{
+					var code = value.GetHashCode();
+					if (!ret.Any(_ => _.GetHashCode() == code))
+					{
+						ret.Add(value);
+					}
+				}
+			}
+
+			return ret;
+
+			#region method Combine
+			IEnumerable<T> Combine(IEnumerable<T> accumlate, object part)
+			{
+				var code = part.GetHashCode();
+				return accumlate.Concat(accumlate.Select(_ => (T)Enum.ToObject(type, _.GetHashCode() + code)));
+			}
+			#endregion // method Combine
+		}
+
+		/// <summary>
 		/// 第一の定義名を取得
 		/// </summary>
 		public static string ToPrimalName(object value)
@@ -83,7 +143,7 @@ namespace Echo
 				yield break;
 			}
 
-			foreach (var part in profile.Parts)
+			foreach (var part in profile.Parts.Reverse())
 			{
 				var code = part.GetHashCode();
 				if ((data & code) == code)
@@ -113,62 +173,122 @@ namespace Echo
 		{
 			public EnumProfile(Type type)
 			{
-				SetupPrimalNames(type);
+				Type = type;
+				IsFlag = Type.IsDefined(typeof(FlagsAttribute), false);
 
-				var isFlag = type.IsDefined(typeof(FlagsAttribute), false);
-				if (isFlag)
-				{
-					SetupParts(type);
-				}
+				this.parts = new Lazy<List<object>>(GenerateParts);
+				this.combinations = new Lazy<List<object>>(GenerateCombinations);
+				this.primalNames = new Lazy<Dictionary<int, string>>(GeneratePrimalNames);
 			}
 
-			public IReadOnlyList<object> Parts => this.parts;
+			public Type Type { get; }
 
-			public IReadOnlyDictionary<int, string> PrimalNames => this.primalNames;
+			public bool IsFlag { get; }
+
+			public IReadOnlyList<object> Parts => this.parts.Value;
+
+			public IReadOnlyList<object> Combinations => this.combinations.Value;
+
+			public IReadOnlyDictionary<int, string> PrimalNames => this.primalNames.Value;
 
 			#region private members
-			private List<object> parts = new List<object>();
-			private Dictionary<int, string> primalNames = new Dictionary<int, string>();
+			private Lazy<List<object>> parts;
+			private Lazy<List<object>> combinations;
+			private Lazy<Dictionary<int, string>> primalNames;
 
-			private void SetupPrimalNames(Type type)
+			private List<object> GenerateParts()
 			{
-				foreach (var name in Enum.GetNames(type))
+				var ret = new List<object>();
+
+				if (IsFlag)
 				{
-					var value = Enum.Parse(type, name);
-					var code = value.GetHashCode();
-					if (!this.primalNames.ContainsKey(code))
+					var unions = new List<object>();
+					var coveredBitsMask = 0x00000000;
+					foreach (var value in Enum.GetValues(Type))
 					{
-						this.primalNames.Add(code, name);
+						var code = value.GetHashCode();
+						if (code.IsSingleBit())
+						{
+							if (!ret.Any(_ => _.GetHashCode() == code))
+							{
+								ret.Add(value);
+								coveredBitsMask |= code;
+							}
+						}
+						else
+						{
+							if (!unions.Any(_ => _.GetHashCode() == code))
+							{
+								unions.Add(value);
+							}
+						}
 					}
+
+					ret.AddRange(unions.Where(_ => (_.GetHashCode() & ~coveredBitsMask) != 0));
+					ret.Sort((lhs, rhs) => lhs.GetHashCode() - rhs.GetHashCode());
 				}
+
+				return ret;
 			}
 
-			private void SetupParts(Type type)
+			private List<object> GenerateCombinations()
 			{
-				var unions = new List<object>();
-				var coveredBitsMask = 0x00000000;
-				foreach (var value in Enum.GetValues(type))
+				var ret = new List<object>();
+
+				if (IsFlag)
 				{
-					var code = value.GetHashCode();
-					if (code.IsSingleBit())
+					var zero = Enum.ToObject(Type, 0x00000000);
+					if (Enum.IsDefined(Type, 0x00000000))
 					{
-						if (!this.parts.Any(_ => _.GetHashCode() == code))
+						ret.Add(zero);
+					}
+
+					foreach (var value in Parts.Aggregate(zero.Enumerate(), (accumlate, _) => Combine(accumlate, _)))
+					{
+						var code = value.GetHashCode();
+						if (code != 0x00000000 && !ret.Any(_ => _.GetHashCode() == code))
 						{
-							this.parts.Add(value);
-							coveredBitsMask |= code;
+							ret.Add(value);
 						}
 					}
-					else
+				}
+				else
+				{
+					foreach (var value in Enum.GetValues(Type))
 					{
-						if (!unions.Any(_ => _.GetHashCode() == code))
+						var code = value.GetHashCode();
+						if (!ret.Any(_ => _.GetHashCode() == code))
 						{
-							unions.Add(value);
+							ret.Add(value);
 						}
 					}
 				}
 
-				this.parts.AddRange(unions.Where(_ => (_.GetHashCode() & ~coveredBitsMask) != 0));
-				this.parts.Sort((lhs, rhs) => rhs.GetHashCode() - lhs.GetHashCode());
+				return ret;
+
+				#region method Combine
+				IEnumerable<object> Combine(IEnumerable<object> accumlate, object part)
+				{
+					var code = part.GetHashCode();
+					return accumlate.Concat(accumlate.Select(_ => Enum.ToObject(Type, _.GetHashCode() + code)));
+				}
+				#endregion // method Combine
+			}
+
+			private Dictionary<int, string> GeneratePrimalNames()
+			{
+				var ret = new Dictionary<int, string>();
+				foreach (var name in Enum.GetNames(Type))
+				{
+					var value = Enum.Parse(Type, name);
+					var code = value.GetHashCode();
+					if (!ret.ContainsKey(code))
+					{
+						ret.Add(code, name);
+					}
+				}
+
+				return ret;
 			}
 			#endregion // private members
 		}
